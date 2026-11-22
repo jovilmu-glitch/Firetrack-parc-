@@ -153,7 +153,7 @@
                 </div>
                 <div>
                     <label class="block text-xs font-medium text-slate-400 mb-1">Observacions del moviment (opcional)</label>
-                    <input type="text" id="moure-notes" placeholder="Ex: Canvi temporal per revisió" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-red-500">
+                    <input type="text" id="moure-notes" placeholder="Ex: Canvi temporal per avaria" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-red-500">
                 </div>
                 <button type="submit" class="w-full bg-red-600 hover:bg-red-500 text-white font-semibold py-3 rounded-xl text-sm shadow-lg shadow-red-600/20 transition">
                     Confirmar Moviment
@@ -280,21 +280,19 @@
             </div>
             <div class="space-y-4">
                 <div>
-                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Filtrar per Categoria</label>
-                    <div id="filtre-cat-container" class="grid grid-cols-2 gap-2">
-                        <!-- Generat per JS -->
-                    </div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Filtrar per Tipus / Estat del Material</label>
+                    <div id="filtre-estat-container" class="grid grid-cols-2 gap-2"></div>
                 </div>
-
                 <hr class="border-slate-800">
-
                 <div>
-                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Filtrar per Ubicació / Compartiment</label>
-                    <div id="filtre-comp-container" class="grid grid-cols-2 gap-2">
-                        <!-- Generat per JS -->
-                    </div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Filtrar per Categoria</label>
+                    <div id="filtre-cat-container" class="grid grid-cols-2 gap-2"></div>
                 </div>
-
+                <hr class="border-slate-800">
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Filtrar per Compartiment</label>
+                    <div id="filtre-comp-container" class="grid grid-cols-2 gap-2"></div>
+                </div>
                 <div class="pt-2 flex space-x-3">
                     <button type="button" onclick="netejarFiltres()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-2.5 rounded-xl text-sm transition">Netejar Filtres</button>
                     <button type="button" onclick="tancarModal('modal-filtrar')" class="flex-1 bg-red-600 hover:bg-red-500 text-white font-semibold py-2.5 rounded-xl text-sm transition shadow-lg shadow-red-600/30">Aplicar</button>
@@ -367,24 +365,27 @@
                 { id: 'v3', codi: '51541', nom: 'FSV - Furgó Salvaments Varis', estat: 'alta' }
             ],
             materials: [
-                { id: 'm1', nom: 'Separador hidràulic Holmatro', codi: 'BMB-1042', categoria: 'Rescat urbà', ubicacioTipus: 'vehicle', vehicleId: 'v1', compartiment: 'Armari 1', notes: 'Revisat', foto: '' },
-                { id: 'm2', nom: 'Màniga 70mm (20m)', codi: '', categoria: 'Hidràulica', ubicacioTipus: 'vehicle', vehicleId: 'v1', compartiment: 'Armari 3', notes: '', foto: '' }
+                { id: 'm1', nom: 'Separador hidràulic Holmatro', codi: 'BMB-1042', categoria: 'Rescat urbà', vehiclePropietariId: 'v1', ubicacioTipus: 'vehicle', vehicleId: 'v1', compartiment: 'Armari 1', notes: 'Revisat', foto: '' },
+                { id: 'm2', nom: 'Màniga 70mm (20m)', codi: '', categoria: 'Hidràulica', vehiclePropietariId: 'v1', ubicacioTipus: 'vehicle', vehicleId: 'v1', compartiment: 'Armari 3', notes: '', foto: '' }
             ],
             historial: []
         };
 
-        let estat = JSON.parse(localStorage.getItem('firetrack_estat_v3')) || DADES_EXEMPLE;
+        let estat = JSON.parse(localStorage.getItem('firetrack_estat_v6')) || DADES_EXEMPLE;
         estat.vehicles.forEach(v => { if(!v.estat) v.estat = 'alta'; });
+        estat.materials.forEach(m => { if(!m.vehiclePropietariId && m.vehicleId) m.vehiclePropietariId = m.vehicleId; });
 
         let pestanyaActiva = 'flota';
         let vehicleSeleccionatId = estat.vehicles[0]?.id || null;
+        let filtreEstatMaterial = 'Tots'; // 'Tots', 'dotacio', 'desplacat', 'rebut'
         let filtreCategoria = 'Totes';
         let filtreCompartiment = 'Tots';
         let cercaText = '';
+        let accordsVehicles = {}; 
 
         function desarEstat() {
             try {
-                localStorage.setItem('firetrack_estat_v3', JSON.stringify(estat));
+                localStorage.setItem('firetrack_estat_v6', JSON.stringify(estat));
             } catch (e) {
                 alert('Memòria plena: prova amb una fotografia més lleugera.');
             }
@@ -423,10 +424,41 @@
         }
 
         function netejarFiltres() {
+            filtreEstatMaterial = 'Tots';
             filtreCategoria = 'Totes';
             filtreCompartiment = 'Tots';
             renderitzar();
             tancarModal('modal-filtrar');
+        }
+
+        function toggleAcordio(tipus) {
+            accordsVehicles[tipus] = accordsVehicles[tipus] === false ? true : false;
+            renderitzar();
+        }
+
+        function obtenirLlistaFiltradaVehicle(vehicleId) {
+            // Material total rellevant per al vehicle seleccionat
+            const materialsVehicle = estat.materials.filter(m => 
+                m.vehiclePropietariId === vehicleId || (m.ubicacioTipus === 'vehicle' && m.vehicleId === vehicleId)
+            );
+
+            return materialsVehicle.filter(m => {
+                // Classificació interna del material respecte a aquest vehicle
+                let esDotacio = (m.vehiclePropietariId === vehicleId && m.ubicacioTipus === 'vehicle' && m.vehicleId === vehicleId);
+                let esDesplacat = (m.vehiclePropietariId === vehicleId && (m.ubicacioTipus !== 'vehicle' || m.vehicleId !== vehicleId));
+                let esRebut = (m.ubicacioTipus === 'vehicle' && m.vehicleId === vehicleId && m.vehiclePropietariId && m.vehiclePropietariId !== vehicleId);
+
+                let coincideixEstat = true;
+                if (filtreEstatMaterial === 'dotacio') coincideixEstat = esDotacio;
+                else if (filtreEstatMaterial === 'desplacat') coincideixEstat = esDesplacat;
+                else if (filtreEstatMaterial === 'rebut') coincideixEstat = esRebut;
+
+                const coincideixCat = filtreCategoria === 'Totes' || m.categoria === filtreCategoria;
+                const coincideixComp = filtreCompartiment === 'Tots' || m.compartiment === filtreCompartiment;
+                const coincideixText = m.nom.toLowerCase().includes(cercaText.toLowerCase()) || (m.codi && m.codi.toLowerCase().includes(cercaText.toLowerCase()));
+
+                return coincideixEstat && coincideixCat && coincideixComp && coincideixText;
+            }).sort((a, b) => compararCompartiments(a.compartiment, b.compartiment));
         }
 
         function renderitzarFlota(container) {
@@ -434,16 +466,14 @@
                 vehicleSeleccionatId = estat.vehicles[0].id;
             }
             const vehicleActual = estat.vehicles.find(v => v.id === vehicleSeleccionatId);
-            const materialsVehicle = estat.materials
-                .filter(m => m.ubicacioTipus === 'vehicle' && m.vehicleId === vehicleSeleccionatId)
-                .sort((a, b) => compararCompartiments(a.compartiment, b.compartiment));
+            
+            const materialDotacioAci = estat.materials.filter(m => m.vehiclePropietariId === vehicleSeleccionatId && m.ubicacioTipus === 'vehicle' && m.vehicleId === vehicleSeleccionatId);
+            const materialPropiDesplacatFora = estat.materials.filter(m => m.vehiclePropietariId === vehicleSeleccionatId && (m.ubicacioTipus !== 'vehicle' || m.vehicleId !== vehicleSeleccionatId));
+            const materialRebutAboard = estat.materials.filter(m => m.ubicacioTipus === 'vehicle' && m.vehicleId === vehicleSeleccionatId && m.vehiclePropietariId && m.vehiclePropietariId !== vehicleSeleccionatId);
 
-            const materialsFiltrats = materialsVehicle.filter(m => {
-                const coincideixCat = filtreCategoria === 'Totes' || m.categoria === filtreCategoria;
-                const coincideixComp = filtreCompartiment === 'Tots' || m.compartiment === filtreCompartiment;
-                const coincideixText = m.nom.toLowerCase().includes(cercaText.toLowerCase()) || (m.codi && m.codi.toLowerCase().includes(cercaText.toLowerCase())) || (m.compartiment && m.compartiment.toLowerCase().includes(cercaText.toLowerCase()));
-                return coincideixCat && coincideixComp && coincideixText;
-            });
+            const dotacioFiltrat = materialDotacioAci.filter(m => aplicarFiltresParcials(m)).sort((a, b) => compararCompartiments(a.compartiment, b.compartiment));
+            const desplaçatFiltrat = materialPropiDesplacatFora.filter(m => aplicarFiltresParcials(m));
+            const rebutFiltrat = materialRebutAboard.filter(m => aplicarFiltresParcials(m));
 
             let htmlVehicles = '<div class="flex space-x-2 overflow-x-auto hide-scrollbar pb-2 mb-3">';
             estat.vehicles.forEach(v => {
@@ -464,7 +494,10 @@
             });
             htmlVehicles += '</div>';
 
-            const teFiltreActiu = filtreCategoria !== 'Totes' || filtreCompartiment !== 'Tots';
+            const teFiltreActiu = filtreEstatMaterial !== 'Tots' || filtreCategoria !== 'Totes' || filtreCompartiment !== 'Tots';
+            const obertDotacio = accordsVehicles['dotacio'] !== false;
+            const obertDesplacat = accordsVehicles['desplacat'] !== false;
+            const obertRebut = accordsVehicles['rebut'] !== false;
 
             container.innerHTML = `
                 ${htmlVehicles}
@@ -475,11 +508,11 @@
                             <span class="bg-red-500/10 text-red-500 text-xs font-bold px-2 py-0.5 rounded-md border border-red-500/20">${vehicleActual.codi}</span>
                             <h2 class="font-bold text-sm text-white">${vehicleActual.nom}</h2>
                         </div>
-                        <p class="text-xs text-slate-400 mt-1">${materialsVehicle.length} elements a bord</p>
+                        <p class="text-xs text-slate-400 mt-1">Elements al vehicle: ${materialDotacioAci.length}</p>
                     </div>
                     <button onclick="imprimirLlistatVehicle('${vehicleActual.id}')" class="bg-slate-800 hover:bg-slate-700 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 border border-slate-700 transition">
                         <i class="fa-solid fa-print text-red-400"></i>
-                        <span>Imprimir</span>
+                        <span>Imprimir ${teFiltreActiu ? '(Filtrat)' : ''}</span>
                     </button>
                 </div>
 
@@ -496,17 +529,86 @@
                     </div>
                 </div>
 
-                <div class="space-y-2.5">
-                    ${materialsFiltrats.length === 0 ? `<p class="text-center text-xs text-slate-500 py-8">No hi ha material amb aquests filtres.</p>` : ''}
-                    ${materialsFiltrats.map(m => renderitzarTargetaMaterial(m)).join('')}
-                </div>
+                ${(filtreEstatMaterial === 'Tots' || filtreEstatMaterial === 'dotacio') ? `
+                <!-- SECCIÓ 1: MATERIAL DE DOTACIÓ -->
+                <div class="bg-slate-950 border border-slate-800 rounded-2xl mb-3 overflow-hidden shadow-sm">
+                    <button onclick="toggleAcordio('dotacio')" class="w-full px-4 py-3 flex items-center justify-between bg-slate-900/80 hover:bg-slate-900 transition">
+                        <div class="flex items-center space-x-2">
+                            <i class="fa-solid fa-box-archive text-emerald-500 text-xs"></i>
+                            <span class="font-bold text-xs text-white uppercase tracking-wider">Material de Dotació (${dotacioFiltrat.length})</span>
+                        </div>
+                        <i class="fa-solid fa-chevron-${obertDotacio ? 'up' : 'down'} text-slate-400 text-xs"></i>
+                    </button>
+                    ${obertDotacio ? `
+                        <div class="p-3 space-y-2.5 border-t border-slate-800/80">
+                            ${dotacioFiltrat.length === 0 ? `<p class="text-center text-xs text-slate-500 py-4">Cap material de dotació a bord amb aquests filtres.</p>` : ''}
+                            ${dotacioFiltrat.map(m => renderitzarTargetaMaterial(m)).join('')}
+                        </div>
+                    ` : ''}
+                </div>` : ''}
+
+                ${(filtreEstatMaterial === 'Tots' || filtreEstatMaterial === 'desplacat') ? `
+                <!-- SECCIÓ 2: MATERIAL DESPLAÇAT -->
+                <div class="bg-slate-950 border border-slate-800 rounded-2xl mb-3 overflow-hidden shadow-sm">
+                    <button onclick="toggleAcordio('desplacat')" class="w-full px-4 py-3 flex items-center justify-between bg-slate-900/80 hover:bg-slate-900 transition">
+                        <div class="flex items-center space-x-2">
+                            <i class="fa-solid fa-arrow-up-from-bracket text-amber-500 text-xs"></i>
+                            <span class="font-bold text-xs text-white uppercase tracking-wider">Material Desplaçat - Ha marxat (${desplaçatFiltrat.length})</span>
+                        </div>
+                        <i class="fa-solid fa-chevron-${obertDesplacat ? 'up' : 'down'} text-slate-400 text-xs"></i>
+                    </button>
+                    ${obertDesplacat ? `
+                        <div class="p-3 space-y-2.5 border-t border-slate-800/80">
+                            ${desplaçatFiltrat.length === 0 ? `<p class="text-center text-xs text-slate-500 py-4">Cap material propi desplaçat fora amb aquests filtres.</p>` : ''}
+                            ${desplaçatFiltrat.map(m => renderitzarTargetaMaterial(m)).join('')}
+                        </div>
+                    ` : ''}
+                </div>` : ''}
+
+                ${(filtreEstatMaterial === 'Tots' || filtreEstatMaterial === 'rebut') ? `
+                <!-- SECCIÓ 3: MATERIAL REBUT -->
+                <div class="bg-slate-950 border border-slate-800 rounded-2xl mb-3 overflow-hidden shadow-sm">
+                    <button onclick="toggleAcordio('rebut')" class="w-full px-4 py-3 flex items-center justify-between bg-slate-900/80 hover:bg-slate-900 transition">
+                        <div class="flex items-center space-x-2">
+                            <i class="fa-solid fa-arrow-down-to-bracket text-sky-500 text-xs"></i>
+                            <span class="font-bold text-xs text-white uppercase tracking-wider">Material Rebut - A bord (${rebutFiltrat.length})</span>
+                        </div>
+                        <i class="fa-solid fa-chevron-${obertRebut ? 'up' : 'down'} text-slate-400 text-xs"></i>
+                    </button>
+                    ${obertRebut ? `
+                        <div class="p-3 space-y-2.5 border-t border-slate-800/80">
+                            ${rebutFiltrat.length === 0 ? `<p class="text-center text-xs text-slate-500 py-4">Cap material rebut amb aquests filtres.</p>` : ''}
+                            ${rebutFiltrat.map(m => renderitzarTargetaMaterial(m)).join('')}
+                        </div>
+                    ` : ''}
+                </div>` : ''}
                 ` : '<p class="text-center text-sm text-slate-400 py-10">Afegeix un vehicle des de Gestió.</p>'}
             `;
         }
 
+        function aplicarFiltresParcials(m) {
+            const coincideixCat = filtreCategoria === 'Totes' || m.categoria === filtreCategoria;
+            const coincideixComp = filtreCompartiment === 'Tots' || m.compartiment === filtreCompartiment;
+            const coincideixText = m.nom.toLowerCase().includes(cercaText.toLowerCase()) || (m.codi && m.codi.toLowerCase().includes(cercaText.toLowerCase()));
+            return coincideixCat && coincideixComp && coincideixText;
+        }
+
         function obrirModalFiltrar() {
+            const estats = [
+                { id: 'Tots', nom: 'Tots els estats' },
+                { id: 'dotacio', nom: 'Dotació (A bord)' },
+                { id: 'desplacat', nom: 'Desplaçat (Ha marxat)' },
+                { id: 'rebut', nom: 'Rebut (A bord)' }
+            ];
             const categories = ['Totes', 'Rescat urbà', 'Hidràulica', 'Risc elèctric', 'Riscos tecnològics', 'Incendi urbà', 'Incendi forestal', 'Sanitari', 'Altres'];
             const compartiments = ['Tots', 'Cabina', 'Armari 1', 'Armari 2', 'Armari 3', 'Armari 4', 'Armari 5', 'Armari 6', 'Bomba', 'Sostre'];
+
+            const estatContainer = document.getElementById('filtre-estat-container');
+            estatContainer.innerHTML = estats.map(e => `
+                <button onclick="seleccionarFiltreEstat('${e.id}')" class="py-2 px-3 rounded-xl text-xs font-medium border text-left transition ${filtreEstatMaterial === e.id ? 'bg-red-600 border-red-500 text-white' : 'bg-slate-950 border-slate-800 text-slate-300'}">
+                    ${e.nom}
+                </button>
+            `).join('');
 
             const catContainer = document.getElementById('filtre-cat-container');
             catContainer.innerHTML = categories.map(cat => `
@@ -523,6 +625,12 @@
             `).join('');
 
             obrirModal('modal-filtrar');
+        }
+
+        function seleccionarFiltreEstat(estatId) {
+            filtreEstatMaterial = estatId;
+            obrirModalFiltrar();
+            renderitzar();
         }
 
         function seleccionarFiltreCat(cat) {
@@ -609,7 +717,7 @@
         function renderitzarHistorial(container) {
             container.innerHTML = `
                 <div class="flex items-center justify-between mb-3">
-                    <h2 class="font-bold text-base text-white">Registre de Moviments</h2>
+                    <h2 class="font-bold text-base text-white">Registre de Moviments i Desplaçaments</h2>
                     ${estat.historial.length > 0 ? `<button onclick="netejarHistorial()" class="text-xs text-slate-400 hover:text-red-400">Netejar</button>` : ''}
                 </div>
                 <div class="space-y-2.5">
@@ -633,28 +741,42 @@
         }
 
         function renderitzarTargetaMaterial(m, mostrarUbicacio = false) {
-            const vehicle = estat.vehicles.find(v => v.id === m.vehicleId);
-            const ubicacioText = m.ubicacioTipus === 'vehicle' ? (vehicle ? `${vehicle.codi} (${m.compartiment})` : 'Vehicle') : (m.ubicacioTipus === 'magatzem' ? 'Magatzem Central' : 'Taller');
+            const vehiclePropietari = estat.vehicles.find(v => v.id === m.vehiclePropietariId);
+            const vehicleActual = estat.vehicles.find(v => v.id === m.vehicleId);
+            
+            let badgeEstat = '';
+            if (m.vehiclePropietariId && m.ubicacioTipus === 'vehicle' && m.vehicleId !== m.vehiclePropietariId) {
+                badgeEstat = `<span class="bg-sky-500/10 text-sky-400 text-[10px] px-2 py-0.5 rounded-md border border-sky-900/50 font-medium">Rebut de ${vehiclePropietari ? vehiclePropietari.codi : 'Extens'}</span>`;
+            } else if (m.vehiclePropietariId && m.ubicacioTipus === 'taller') {
+                badgeEstat = `<span class="bg-red-500/10 text-red-400 text-[10px] px-2 py-0.5 rounded-md border border-red-900/50 font-medium">En Taller</span>`;
+            } else if (m.vehiclePropietariId && m.ubicacioTipus === 'magatzem') {
+                badgeEstat = `<span class="bg-amber-500/10 text-amber-400 text-[10px] px-2 py-0.5 rounded-md border border-amber-900/50 font-medium">Al Magatzem</span>`;
+            } else if (m.vehiclePropietariId && m.ubicacioTipus === 'vehicle' && m.vehicleId !== m.vehiclePropietariId) {
+                badgeEstat = `<span class="bg-amber-500/10 text-amber-400 text-[10px] px-2 py-0.5 rounded-md border border-amber-900/50 font-medium">Desplaçat a ${vehicleActual ? vehicleActual.codi : ''}</span>`;
+            }
+
+            const ubicacioText = m.ubicacioTipus === 'vehicle' ? (vehicleActual ? `${vehicleActual.codi} (${m.compartiment})` : 'Vehicle') : (m.ubicacioTipus === 'magatzem' ? 'Magatzem Central' : 'Taller / Reparació');
 
             return `
-                <div class="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 flex items-start space-x-3 shadow-sm">
+                <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 flex items-start space-x-3 shadow-sm">
                     ${m.foto ? `
-                        <div onclick="obrirModalFoto('${m.foto}', '${m.nom}')" class="flex-shrink-0 w-16 h-16 bg-slate-900 rounded-xl border border-slate-800 overflow-hidden cursor-pointer flex items-center justify-center">
+                        <div onclick="obrirModalFoto('${m.foto}', '${m.nom}')" class="flex-shrink-0 w-14 h-14 bg-slate-950 rounded-lg border border-slate-800 overflow-hidden cursor-pointer flex items-center justify-center">
                             <img src="${m.foto}" class="w-full h-full object-cover">
                         </div>
                     ` : `
-                        <div class="flex-shrink-0 w-12 h-12 bg-slate-900 rounded-xl border border-slate-800 flex items-center justify-center text-slate-600 text-sm">
+                        <div class="flex-shrink-0 w-12 h-12 bg-slate-950 rounded-lg border border-slate-800 flex items-center justify-center text-slate-600 text-sm">
                             <i class="fa-solid fa-box"></i>
                         </div>
                     `}
                     <div class="flex-1 min-w-0">
-                        <div class="flex items-center space-x-2 mb-0.5">
+                        <div class="flex items-center space-x-1.5 mb-0.5 flex-wrap gap-y-1">
                             ${m.codi ? `<span class="text-[10px] font-mono bg-red-950 text-red-400 px-2 py-0.5 rounded border border-red-900/50">${m.codi}</span>` : ''}
-                            <span class="text-[10px] bg-slate-900 text-slate-400 px-2 py-0.5 rounded">${m.categoria}</span>
+                            <span class="text-[10px] bg-slate-950 text-slate-400 px-2 py-0.5 rounded">${m.categoria}</span>
+                            ${badgeEstat}
                         </div>
                         <h4 class="font-bold text-sm text-white truncate">${m.nom}</h4>
                         <p class="text-xs text-slate-400 mt-0.5">
-                            ${mostrarUbicacio ? `Ubicació: <b class="text-slate-200">${ubicacioText}</b>` : `Armari: <b class="text-slate-200">${m.compartiment || '-'}</b>`}
+                            Ubicació: <b class="text-slate-200">${ubicacioText}</b>
                             ${m.notes ? `<br><span class="italic text-slate-500">"${m.notes}"</span>` : ''}
                         </p>
                     </div>
@@ -806,10 +928,12 @@
                 if (m) {
                     m.nom = nom; m.codi = codi; m.categoria = categoria; m.ubicacioTipus = ubicacioTipus;
                     m.vehicleId = vehicleId; m.compartiment = compartiment; m.notes = notes; m.foto = foto;
+                    if(!m.vehiclePropietariId && vehicleId) m.vehiclePropietariId = vehicleId;
                 }
             } else {
+                const nouId = 'm_' + Date.now();
                 estat.materials.push({
-                    id: 'm_' + Date.now(), nom, codi, categoria, ubicacioTipus, vehicleId, compartiment, notes, foto
+                    id: nouId, nom, codi, categoria, vehiclePropietariId: vehicleId, ubicacioTipus, vehicleId, compartiment, notes, foto
                 });
             }
             desarEstat();
@@ -859,6 +983,7 @@
             if (destiTipus === 'vehicle') {
                 m.vehicleId = document.getElementById('moure-vehicle-id').value;
                 m.compartiment = document.getElementById('moure-compartiment').value;
+                if(!m.vehiclePropietariId) m.vehiclePropietariId = m.vehicleId;
             } else {
                 m.vehicleId = null;
                 m.compartiment = '';
@@ -888,21 +1013,24 @@
 
         function imprimirLlistatVehicle(vehId) {
             const v = estat.vehicles.find(item => item.id === vehId);
-            const materials = estat.materials
-                .filter(m => m.ubicacioTipus === 'vehicle' && m.vehicleId === vehId)
-                .sort((a, b) => compararCompartiments(a.compartiment, b.compartiment));
+            const materialsFiltrats = obtenirLlistaFiltradaVehicle(vehId);
+
+            let titolFiltre = 'Llistat Complet';
+            if (filtreEstatMaterial === 'dotacio') titolFiltre = 'Material de Dotació';
+            else if (filtreEstatMaterial === 'desplacat') titolFiltre = 'Material Desplaçat (Ha marxat)';
+            else if (filtreEstatMaterial === 'rebut') titolFiltre = 'Material Rebut (A bord)';
 
             const printArea = document.getElementById('print-area');
             printArea.innerHTML = `
                 <div class="mb-4">
                     <h2 class="text-xl font-bold">PARC DE BOMBERS · INVENTARI DE VEHICLE</h2>
-                    <p class="text-sm">Indicatiu: <b>${v.codi}</b> — ${v.nom}</p>
+                    <p class="text-sm">Indicatiu: <b>${v.codi}</b> — ${v.nom} | Vista: <b>${titolFiltre}</b></p>
                     <p class="text-xs text-slate-500">Data d'impressió: ${new Date().toLocaleString('ca-ES')}</p>
                 </div>
                 <table>
                     <thead>
                         <tr>
-                            <th>Compartiment</th>
+                            <th>Compartiment / Ubicació</th>
                             <th>Codi</th>
                             <th>Nom del Material</th>
                             <th>Categoria</th>
@@ -910,9 +1038,9 @@
                         </tr>
                     </thead>
                     <tbody>
-                        ${materials.map(m => `
+                        ${materialsFiltrats.map(m => `
                             <tr>
-                                <td><b>${m.compartiment || '-'}</b></td>
+                                <td><b>${m.compartiment || m.ubicacioTipus}</b></td>
                                 <td>${m.codi || '-'}</td>
                                 <td>${m.nom}</td>
                                 <td>${m.categoria}</td>
